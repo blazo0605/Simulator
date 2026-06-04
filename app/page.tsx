@@ -1,65 +1,74 @@
-import Image from "next/image";
+// Landing page — shown to visitors. If the user is already logged in,
+// redirect them straight to /dashboard so they skip this page.
 
-export default function Home() {
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+
+export default async function HomePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Already logged in — no need to show the landing page.
+  if (user) redirect('/dashboard')
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="flex flex-col flex-1 items-center justify-center px-6 py-24 text-center">
+      <div className="max-w-2xl space-y-6">
+        <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-sm text-violet-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-400"></span>
+          Immersive AI roleplay &amp; perspective simulator
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <h1 className="text-5xl font-bold tracking-tight text-white sm:text-6xl">
+          Step into any{' '}
+          <span className="text-violet-400">perspective</span>
+        </h1>
+
+        <p className="text-lg text-zinc-400 leading-relaxed">
+          Create a character — a wizard, a historical figure, a detective — then
+          have a real conversation with them. Every reply stays in character,
+          every detail remembered.
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-left mt-8">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-2">
+            <div className="text-2xl">🎭</div>
+            <h2 className="font-semibold text-white">Fun Mode</h2>
+            <p className="text-sm text-zinc-400">
+              Immersive roleplay. Fantasy worlds, adventures, and creative
+              storytelling.
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-2">
+            <div className="text-2xl">🏛️</div>
+            <h2 className="font-semibold text-white">Perspective Mode</h2>
+            <p className="text-sm text-zinc-400">
+              Educational. Talk to historical figures, explore different
+              viewpoints, learn by dialogue.
+            </p>
+          </div>
         </div>
-      </main>
-    </div>
-  );
+
+        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
+          <Link
+            href="/register"
+            className="rounded-lg bg-violet-600 px-6 py-3 font-semibold text-white hover:bg-violet-500 transition-colors"
+          >
+            Get started free
+          </Link>
+          <Link
+            href="/login"
+            className="rounded-lg border border-zinc-700 px-6 py-3 font-semibold text-zinc-300 hover:bg-zinc-800 transition-colors"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+
+      <p className="mt-20 text-xs text-zinc-600">
+        Safe for educational use · Content moderation built in
+      </p>
+    </main>
+  )
 }
