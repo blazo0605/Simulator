@@ -1,11 +1,12 @@
-// Chat page — Server Component wrapper.
-// Loads the conversation, its character, and the message history from Supabase.
-// Then hands everything off to ChatUI (a Client Component) which handles
-// the interactive streaming.
+// Chat page — Server Component.
+// Loads conversation + character + message history.
+// If this is a brand-new conversation (no messages yet), generates the character's
+// opening message server-side before rendering, so ChatUI receives it pre-populated.
 
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ChatUI } from '@/components/chat/ChatUI'
+import { generateOpening } from '@/lib/opening'
 import type { Character, Conversation, Message } from '@/types/database'
 
 interface Props {
@@ -16,7 +17,6 @@ export default async function ChatPage({ params }: Props) {
   const { id } = await params
   const supabase = await createClient()
 
-  // Load conversation — RLS ensures the user can only see their own
   const { data: convData } = await supabase
     .from('conversations')
     .select('*')
@@ -26,7 +26,6 @@ export default async function ChatPage({ params }: Props) {
   const conversation = convData as Conversation | null
   if (!conversation) notFound()
 
-  // Load character
   const { data: charData } = await supabase
     .from('characters')
     .select('*')
@@ -36,14 +35,44 @@ export default async function ChatPage({ params }: Props) {
   const character = charData as Character | null
   if (!character) notFound()
 
-  // Load full message history, oldest first
   const { data: msgData } = await supabase
     .from('messages')
     .select('*')
     .eq('conversation_id', id)
     .order('created_at', { ascending: true })
 
-  const messages = (msgData ?? []) as Message[]
+  let messages = (msgData ?? []) as Message[]
+
+  // ── Auto-opening ────────────────────────────────────────────
+  // On a brand-new conversation there are no messages yet.
+  // Generate the character's opening in-character and save it as the first
+  // assistant message. The loading skeleton shows while this runs.
+  // On any subsequent page load the messages table is non-empty, so this
+  // branch is skipped — no risk of duplicate openings.
+  if (messages.length === 0) {
+    try {
+      const openingContent = await generateOpening(character)
+
+      if (openingContent) {
+        const { data: saved } = await supabase
+          .from('messages')
+          .insert({
+            conversation_id: id,
+            role: 'assistant',
+            content: openingContent,
+          })
+          .select('*')
+          .single()
+
+        if (saved) {
+          messages = [saved as Message]
+        }
+      }
+    } catch {
+      // Opening generation is best-effort — if Groq is unavailable, the user
+      // just sees an empty chat and can type first instead.
+    }
+  }
 
   return (
     <ChatUI

@@ -1,21 +1,24 @@
 // PersonaSim service worker
-// Strategy:
-//   - Static Next.js chunks (_next/static/**): cache-first (they're content-hashed)
-//   - API routes (/api/**): network-only (never cache live data)
-//   - Everything else: network-first, fall back to cache
+//
+// Rule: NEVER intercept page navigations (request.mode === 'navigate').
+// Caching HTML or redirects causes stale auth state and redirect loops on return visits.
+//
+// Only cache:
+//   /_next/static/** — content-hashed JS/CSS chunks, safe to cache forever
+//
+// Never cache:
+//   - Page HTML (navigate requests) — server must always handle these
+//   - /api/** — live data, streaming, auth
+//   - Everything else — let the browser decide
 
 const CACHE = 'persona-sim-v1'
 
-// Pre-cache the offline fallback shell
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(['/']))
-  )
+self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
-// Delete old caches on activation
 self.addEventListener('activate', event => {
+  // Clean up any caches from previous SW versions
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
@@ -28,39 +31,31 @@ self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Only handle same-origin GET requests
+  // Ignore non-GET and cross-origin requests
   if (request.method !== 'GET' || url.origin !== location.origin) return
 
-  // API calls: always go to the network (streaming responses, auth, etc.)
+  // ── Never intercept page navigations ─────────────────────
+  // This is the critical rule. Caching HTML breaks auth (stale sessions,
+  // cached redirects) and causes the infinite-refresh bug on return visits.
+  if (request.mode === 'navigate') return
+
+  // Never cache API calls (streaming, auth, live data)
   if (url.pathname.startsWith('/api/')) return
 
-  // Next.js static chunks: cache-first (content-hashed filenames never change)
+  // ── Cache Next.js static chunks ───────────────────────────
+  // Files under /_next/static/ have content hashes in their names.
+  // They never change for a given deploy, so cache-first is safe.
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached
         return fetch(request).then(response => {
           if (response.ok) {
-            const clone = response.clone()
-            caches.open(CACHE).then(cache => cache.put(request, clone))
+            caches.open(CACHE).then(cache => cache.put(request, response.clone()))
           }
           return response
         })
       })
     )
-    return
   }
-
-  // Everything else (pages, manifests, icons): network-first, cache fallback
-  event.respondWith(
-    fetch(request)
-      .then(response => {
-        if (response.ok) {
-          const clone = response.clone()
-          caches.open(CACHE).then(cache => cache.put(request, clone))
-        }
-        return response
-      })
-      .catch(() => caches.match(request))
-  )
 })

@@ -1,10 +1,9 @@
 'use client'
 
-// ChatUI — the interactive chat interface.
-// Client Component: manages streaming state, moderation feedback, and mode-specific UI.
-
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
+import { springs } from '@/components/ui/motion'
 import type { Character, Conversation, Message } from '@/types/database'
 
 interface Props {
@@ -13,24 +12,41 @@ interface Props {
   initialMessages: Message[]
 }
 
-// UIMessage extends the DB Message shape with streaming + system message support.
-// 'system' role is used for in-app notices (e.g. moderation blocks) — never sent to AI.
 interface UIMessage {
+  id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   streaming?: boolean
 }
 
+function uid() {
+  return Math.random().toString(36).slice(2)
+}
+
+function avatarColor(name: string) {
+  const palette = [
+    'bg-violet-600', 'bg-amber-600', 'bg-sky-600',
+    'bg-emerald-600', 'bg-rose-600', 'bg-orange-500',
+  ]
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff
+  return palette[h % palette.length]
+}
+
 export function ChatUI({ conversation, character, initialMessages }: Props) {
-  const [messages, setMessages] = useState<UIMessage[]>(initialMessages)
+  const [messages, setMessages] = useState<UIMessage[]>(
+    initialMessages.map(m => ({ ...m, id: uid() }))
+  )
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [])
+
+  useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
 
   async function sendMessage() {
     const content = input.trim()
@@ -39,70 +55,54 @@ export function ChatUI({ conversation, character, initialMessages }: Props) {
     setInput('')
     setIsStreaming(true)
 
-    // Optimistically show the user message and an empty streaming bubble
-    setMessages(prev => [...prev, { role: 'user', content }])
-    setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true }])
+    const userMsg: UIMessage = { id: uid(), role: 'user', content }
+    const assistantMsg: UIMessage = { id: uid(), role: 'assistant', content: '', streaming: true }
+    const assistantId = assistantMsg.id
+
+    setMessages(prev => [...prev, userMsg, assistantMsg])
 
     try {
-      const response = await fetch('/api/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: conversation.id, content }),
       })
 
-      // ── Moderation block ─────────────────────────────────
-      if (response.status === 400) {
-        const data = await response.json().catch(() => null)
-        // Remove the empty assistant bubble
-        setMessages(prev => prev.slice(0, -1))
+      if (res.status === 400) {
+        const data = await res.json().catch(() => null)
+        setMessages(prev => prev.filter(m => m.id !== assistantId))
         if (data?.moderated) {
-          // Add an in-app system notice explaining why the message was blocked
           setMessages(prev => [
             ...prev,
-            { role: 'system', content: data.reason ?? 'Message blocked by content filter.' },
+            { id: uid(), role: 'system', content: data.reason ?? 'Poruka blokirana filtrom sadržaja.' },
           ])
         }
         return
       }
 
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+      if (!res.ok) throw new Error(`Greška: ${res.status}`)
 
-      // ── Stream response ──────────────────────────────────
-      const reader = response.body!.getReader()
+      const reader = res.body!.getReader()
       const decoder = new TextDecoder()
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-
         const chunk = decoder.decode(value, { stream: true })
-        setMessages(prev => {
-          const updated = [...prev]
-          const last = updated[updated.length - 1]
-          if (last?.streaming) {
-            updated[updated.length - 1] = { ...last, content: last.content + chunk }
-          }
-          return updated
-        })
+        setMessages(prev => prev.map(m =>
+          m.id === assistantId ? { ...m, content: m.content + chunk } : m
+        ))
       }
 
-      // Mark the last message as done (removes blinking cursor)
-      setMessages(prev => {
-        const updated = [...prev]
-        const last = updated[updated.length - 1]
-        if (last?.streaming) {
-          updated[updated.length - 1] = { ...last, streaming: false }
-        }
-        return updated
-      })
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId ? { ...m, streaming: false } : m
+      ))
     } catch {
-      setMessages(prev => {
-        const without = prev.slice(0, -1)
-        return [
-          ...without,
-          { role: 'assistant', content: 'Something went wrong. Please try again.' },
-        ]
-      })
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId
+          ? { ...m, content: 'Nešto je pošlo naopako. Pokušaj ponovo.', streaming: false }
+          : m
+      ))
     } finally {
       setIsStreaming(false)
       textareaRef.current?.focus()
@@ -110,62 +110,102 @@ export function ChatUI({ conversation, character, initialMessages }: Props) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
   const isFun = character.mode === 'fun'
+  const initial = character.name.trim()[0]?.toUpperCase() ?? '?'
+  const color = avatarColor(character.name)
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100dvh - 7.5rem)' }}>
-      {/* ── Header ───────────────────────────────────────────── */}
-      <div className="border-b border-zinc-800 px-2 py-3 shrink-0">
+    <div className="flex-1 min-h-0 flex flex-col">
+
+      {/* ── Character header ──────────────────────────────── */}
+      <div
+        className="shrink-0 px-4 py-3"
+        style={{
+          background: 'rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.04)',
+        }}
+      >
         <div className="flex items-center gap-3">
-          <Link
-            href={`/characters/${character.id}`}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors text-sm px-1"
-            aria-label="Back to character"
-          >
+          <Link href={`/characters/${character.id}`}
+            className="text-[--text-muted] hover:text-[--text] transition-colors text-sm
+                       w-7 flex items-center justify-center shrink-0">
             ←
           </Link>
-          <span className="text-base font-semibold text-white truncate">
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs
+                           font-bold text-white shrink-0 ${color} ring-2 ring-white/10`}>
+            {initial}
+          </div>
+          <span className="text-[15px] font-semibold text-[--text] truncate tracking-wide"
+                style={{ fontFamily: 'var(--font-display)' }}>
             {character.name}
           </span>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-              isFun
-                ? 'bg-amber-500/20 text-amber-300'
-                : 'bg-sky-500/20 text-sky-300'
-            }`}
-          >
-            {isFun ? '🎭 Fun' : '🏛️ Perspective'}
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            isFun ? 'bg-amber-500/15 text-amber-300' : 'bg-sky-500/15 text-sky-300'
+          }`}>
+            {isFun ? '🎭 Zabavni' : '🏛️ Edukativni'}
           </span>
         </div>
-
-        {/* Learning goals banner — only in perspective mode when goals are set */}
         {!isFun && character.learning_goals && (
-          <p className="mt-2 ml-8 text-xs text-sky-400/70 leading-relaxed">
-            <span className="font-medium text-sky-400">Goal:</span>{' '}
+          <p className="mt-1.5 ml-[3.75rem] text-[11px] text-sky-400/60 leading-relaxed">
+            <span className="text-sky-400/90 font-medium">Cilj:</span>{' '}
             {character.learning_goals}
           </p>
         )}
       </div>
 
-      {/* ── Message list ─────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-2 py-6 space-y-5 min-h-0">
+      {/* ── Messages ─────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 min-h-0">
         {messages.length === 0 && <EmptyState character={character} />}
 
-        {messages.map((msg, i) => (
-          <Bubble key={i} message={msg} characterName={character.name} />
-        ))}
+        <AnimatePresence initial={false}>
+          {messages.map(msg => {
+            if (msg.streaming && msg.content === '') {
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  className="mb-5"
+                >
+                  <ThinkingBubble name={character.name} initial={initial} color={color} />
+                </motion.div>
+              )
+            }
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                className="mb-5"
+              >
+                <Bubble msg={msg} name={character.name} initial={initial} color={color} />
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
 
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className="h-1" />
       </div>
 
-      {/* ── Input bar ────────────────────────────────────────── */}
-      <div className="border-t border-zinc-800 px-2 pt-3 pb-2 shrink-0">
+      {/* ── Input bar ────────────────────────────────────── */}
+      <div
+        className="shrink-0 px-4 pt-3 pb-3"
+        style={{
+          background: 'rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
+          borderTop: '1px solid rgba(255,255,255,0.07)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+        }}
+      >
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
@@ -173,113 +213,201 @@ export function ChatUI({ conversation, character, initialMessages }: Props) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isStreaming}
-            placeholder={
-              isFun
-                ? `Speak to ${character.name}…`
-                : `Ask ${character.name} a question…`
-            }
+            placeholder={isFun ? `Reci nešto ${character.name}…` : `Postavi pitanje ${character.name}…`}
             rows={1}
-            className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm
-                       text-white placeholder-zinc-500 outline-none resize-none
-                       focus:border-violet-500 focus:ring-1 focus:ring-violet-500
-                       disabled:opacity-50 transition-colors"
-            style={{ maxHeight: '120px', overflowY: 'auto' }}
+            className="flex-1 rounded-xl px-4 py-3 text-sm text-[--text]
+                       placeholder:text-[--text-muted] outline-none resize-none
+                       disabled:opacity-40 min-h-[44px]"
+            style={{
+              maxHeight: '120px', overflowY: 'auto',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.09)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+              transition: 'border-color 0.15s, box-shadow 0.15s',
+            }}
+            onFocus={e => {
+              e.currentTarget.style.border = '1px solid rgba(124,58,237,0.50)'
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124,58,237,0.15), inset 0 1px 0 rgba(255,255,255,0.06)'
+            }}
+            onBlur={e => {
+              e.currentTarget.style.border = '1px solid rgba(255,255,255,0.09)'
+              e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06)'
+            }}
           />
-          <button
+
+          <motion.button
             onClick={sendMessage}
             disabled={isStreaming || !input.trim()}
-            className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-600
-                       hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed
-                       transition-colors shrink-0"
-            aria-label="Send message"
+            whileHover={isStreaming || !input.trim() ? {} : { scale: 1.08, y: -1 }}
+            whileTap={isStreaming || !input.trim() ? {} : { scale: 0.92 }}
+            transition={springs.snappy}
+            className="flex items-center justify-center w-11 h-11 rounded-xl bg-[--accent]
+                       hover:bg-[--accent-h] disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+            style={{ boxShadow: 'var(--shadow-accent)' }}
+            aria-label="Pošalji"
           >
-            {isStreaming ? (
-              <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            ) : (
-              <span className="text-white text-lg leading-none">↑</span>
-            )}
-          </button>
+            {isStreaming
+              ? <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white animate-spin" />
+              : <span className="text-white text-base leading-none">↑</span>
+            }
+          </motion.button>
         </div>
-        <p className="text-center text-xs text-zinc-600 mt-2">
-          Enter to send · Shift+Enter for new line
+        <p className="text-center text-[11px] text-[--text-dim] mt-2 select-none">
+          Enter za slanje · Shift+Enter za novi red
         </p>
       </div>
     </div>
   )
 }
 
-// ── Empty state — different copy per mode ─────────────────────
+/* ── Empty state ───────────────────────────────────────────────── */
 function EmptyState({ character }: { character: Character }) {
   const isFun = character.mode === 'fun'
-
   return (
-    <div className="text-center text-zinc-500 text-sm mt-16 space-y-2">
-      <p className="text-3xl">{isFun ? '🎭' : '🏛️'}</p>
-      <p>
-        {isFun ? (
-          <>
-            You've entered the scene. Say something to{' '}
-            <span className="text-white font-medium">{character.name}</span>.
-          </>
-        ) : (
-          <>
-            Begin your dialogue with{' '}
-            <span className="text-white font-medium">{character.name}</span>.
-          </>
-        )}
-      </p>
+    <motion.div
+      initial={{ opacity: 0, y: 16, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+      className="text-center py-20 space-y-3"
+    >
+      <motion.p
+        className="text-4xl"
+        animate={{ y: [0, -6, 0] }}
+        transition={{ repeat: Infinity, duration: 3.5, ease: 'easeInOut' }}
+      >
+        {isFun ? '🎭' : '🏛️'}
+      </motion.p>
+      <div className="space-y-1">
+        <p className="text-base text-[--text] tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
+          {character.name}
+        </p>
+        <p className="text-sm text-[--text-muted]">
+          {isFun ? 'Scena je postavljena. Obrati mu se.' : 'Počni razgovor. Postavi pitanje.'}
+        </p>
+      </div>
       {!isFun && (
-        <p className="text-xs text-zinc-600 max-w-xs mx-auto">
-          Ask about their experiences, views, or historical context. You can ask
-          meta-questions too — they'll step outside the persona briefly to explain.
+        <p className="text-xs text-[--text-dim] max-w-[260px] mx-auto leading-relaxed">
+          Pitaj o iskustvima, stavovima ili historijskom kontekstu.
         </p>
       )}
+    </motion.div>
+  )
+}
+
+/* ── Typing indicator ─────────────────────────────────────────── */
+function ThinkingBubble({ name, initial, color }: { name: string; initial: string; color: string }) {
+  return (
+    <div className="flex items-end gap-2.5">
+      <Avatar initial={initial} color={color} />
+      <div>
+        <p className="text-[11px] text-[--text-muted] mb-1.5 ml-0.5"
+           style={{ fontFamily: 'var(--font-display)' }}>
+          {name}
+        </p>
+        <div
+          className="rounded-2xl rounded-bl-sm px-4 py-3.5 flex gap-1.5 items-center"
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+          }}
+        >
+          {[0, 1, 2].map(i => (
+            <motion.span
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-violet-400/70"
+              animate={{ y: [0, -5, 0], opacity: [0.35, 1, 0.35] }}
+              transition={{
+                repeat: Infinity, duration: 1.1,
+                delay: i * 0.17,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
-// ── Message bubble ────────────────────────────────────────────
-function Bubble({
-  message,
-  characterName,
-}: {
-  message: UIMessage
-  characterName: string
+/* ── Message bubble ────────────────────────────────────────────── */
+function Bubble({ msg, name, initial, color }: {
+  msg: UIMessage; name: string; initial: string; color: string
 }) {
-  // System messages (moderation notices) render as a centred notice, not a chat bubble
-  if (message.role === 'system') {
+  if (msg.role === 'system') {
     return (
       <div className="flex justify-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30
-                         bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400">
-          <span>⚠</span>
-          {message.content}
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-amber-400/90"
+          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)' }}
+        >
+          ⚠ {msg.content}
         </span>
       </div>
     )
   }
 
-  const isUser = message.role === 'user'
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[78%]">
+          <div
+            className="rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-white"
+            style={{
+              background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              border: '1px solid rgba(167,139,250,0.25)',
+              boxShadow: 'var(--shadow-accent), var(--shadow-2), inset 0 1px 0 rgba(255,255,255,0.14)',
+            }}
+          >
+            {msg.content}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
+  // assistant
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className="max-w-[80%] space-y-1">
-        {!isUser && (
-          <p className="text-xs text-zinc-500 ml-1">{characterName}</p>
-        )}
+    <div className="flex items-end gap-2.5">
+      <Avatar initial={initial} color={color} />
+      <div className="max-w-[78%]">
+        <p className="text-[11px] text-[--text-muted] mb-1.5 ml-0.5"
+           style={{ fontFamily: 'var(--font-display)' }}>
+          {name}
+        </p>
         <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-            isUser
-              ? 'bg-violet-600 text-white rounded-br-sm'
-              : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
-          }`}
+          className="rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-[--text]"
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            boxShadow: 'var(--shadow-2), inset 0 1px 0 rgba(255,255,255,0.065)',
+          }}
         >
-          {message.content}
-          {message.streaming && (
-            <span className="inline-block w-1.5 h-[1em] bg-zinc-400 animate-pulse ml-0.5 align-middle rounded-sm" />
+          {msg.content}
+          {/* Glowing streaming cursor */}
+          {msg.streaming && (
+            <span
+              className="cursor-glow"
+              style={{ height: '0.9em', marginLeft: '2px' }}
+            />
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── Avatar ─────────────────────────────────────────────────────── */
+function Avatar({ initial, color }: { initial: string; color: string }) {
+  return (
+    <div className={`w-8 h-8 rounded-full flex items-center justify-center
+                     text-xs font-bold text-white shrink-0 ${color}
+                     ring-2 ring-white/10`}>
+      {initial}
     </div>
   )
 }

@@ -28,24 +28,33 @@ export default async function AppLayout({
 
   return (
     <div className="flex flex-col flex-1">
-      {/* Top navigation bar */}
-      <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/dashboard" className="text-lg font-bold text-white tracking-tight">
-            Persona<span className="text-violet-400">Sim</span>
+      <header
+        className="sticky top-0 z-10 h-14"
+        style={{
+          background: 'rgba(0,0,0,0.50)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.04)',
+        }}
+      >
+        <div className="max-w-[64rem] mx-auto px-4 h-full flex items-center justify-between">
+          <Link
+            href="/dashboard"
+            className="text-base font-bold tracking-tight"
+            style={{ fontFamily: 'var(--font-sans)' }}
+          >
+            <span className="text-[--text]">Persona</span>
+            <span className="text-violet-400">Sim</span>
           </Link>
-
-          <div className="flex items-center gap-6">
-            <span className="text-xs text-zinc-500 hidden sm:block">
-              {user.email}
-            </span>
+          <div className="flex items-center gap-5">
+            <span className="text-xs text-[--text-muted] hidden sm:block">{user.email}</span>
             <LogoutButton />
           </div>
         </div>
       </header>
 
-      {/* Page content */}
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
+      <main className="flex-1 flex flex-col max-w-[64rem] mx-auto w-full px-4">
         {children}
       </main>
     </div>

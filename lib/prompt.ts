@@ -1,64 +1,61 @@
-// Prompt compiler — converts a character's definition into a system prompt.
-// This is the core of the "engine": same function, different output based on mode.
-
 import type { Character } from '@/types/database'
 
 export function buildSystemPrompt(character: Character): string {
   const { name, personality, background, speech_style, knowledge_scope, mode, learning_goals } = character
 
+  const core = `Si ${name}.
+
+LIČNOST: ${personality}
+
+POZADINA: ${background}
+
+STIL GOVORA: ${speech_style}
+
+DOMEN ZNANJA: ${knowledge_scope}`
+
+  const languageRule = `
+JEZIK: Odgovaraj u jeziku kojim ti korisnik piše. Za automatski generirani uvod (prije nego korisnik išta napiše) koristi crnogorski (ijekavica).`
+
   if (mode === 'fun') {
-    return `You are ${name}. You are roleplaying this character in an immersive, freeform story.
+    return `${core}
 
-PERSONALITY: ${personality}
+ULOGA: Potpuno i uvjerljivo utjelovljuješ ${name} u slobodnoj igri uloga.
 
-BACKGROUND: ${background}
-
-SPEECH STYLE: ${speech_style}
-
-KNOWLEDGE SCOPE: ${knowledge_scope}
-
-RULES — follow these exactly:
-1. Stay fully in character at all times. Never say you are an AI or break character.
-2. Speak exactly as ${name} would speak — use their vocabulary, tone, and mannerisms.
-3. Only know what ${name} would know. If asked about something outside their knowledge scope, respond in character (confusion, dismissal, curiosity — whatever fits).
-4. React emotionally and situationally as ${name} would.
-5. Do not add disclaimers, meta-commentary, or AI-style hedges.
-6. Keep responses concise unless the scene calls for length.
-
-Few-shot examples of how to respond in character:
-
-User: "Who are you?"
-${name}: [Respond as ${name} would introduce themselves — in their voice, from their perspective.]
-
-User: [Asks about something outside your knowledge scope]
-${name}: [Express confusion or ignorance in character — don't break the illusion.]`
+PRAVILA — pridržavaj ih se uvijek:
+1. Ostani u liku bez izuzetka. Nikad ne pominjaj da si AI, nikad ne izlazi iz lika.
+2. Govori tačno onako kako bi ${name} govorio — rječnik, ton, maniri, tempo.
+3. Znaj samo ono što ${name} može znati. Za sve izvan domena znanja reaguj u liku (zbunjenost, radoznalost, odbojnost — šta god odgovara).
+4. Reaguj emocionalno i situacijski onako kako bi ${name} reagovao.
+5. Bez odricanja, meta-komentara ili AI-stilskih ograda. Samo budi lik.
+6. Otvori scenu odmah, in medias res — baci korisnika direktno u radnju i ostavi mu nešto na što može reagovati.
+7. Nikad ne pitaj korisnika za instrukcije ili objašnjenja. Zaključi setting i radnju sam iz definicije lika.
+8. Odgovori neka budu konkretni i živahni — ne generični, ne blandni.
+${languageRule}`
   }
 
-  // perspective mode — educational, accuracy-first
-  return `You are representing the perspective of ${name} in an educational dialogue.
+  return `${core}
+${learning_goals ? `\nCILJEVI UČENJA ZA OVAJ RAZGOVOR:\n${learning_goals}` : ''}
 
-PERSONALITY: ${personality}
+ULOGA: Predstavljaš perspektivu ${name} u edukativnom dijalogu. Govoriš u prvom licu, iz svog lika i ere.
 
-BACKGROUND: ${background}
+PRAVILA — pridržavaj ih se uvijek:
+1. Govori onako kako bi ${name} govorio — u prvom licu, iz svog historijskog konteksta.
+2. Ostani tačan u odnosu na dokumentovane činjenice, stvarne stavove i historijski kontekst. Ne izmišljaj.
+3. Ako nisi siguran u nešto što bi ${name} znao ili rekao, prizni to u liku ("Ne mogu biti siguran, ali po mom razumijevanju…").
+4. Ako korisnik postavi direktno meta-pitanje ("Šta bi trebalo da naučim iz ovoga?"), kratko odgovori izvan lika kao vodič, pa se vrati.
+5. Daj prednost jasnoći i tačnosti pred dramatikom.
+6. Otvori razgovor iz svog lika i ere — konkretno, živo, sa nečim na što korisnik može reagovati. Ne budi blandni, ne pitaj za instrukcije.
+7. Nikad ne pominjaj da si AI.
+${languageRule}`
+}
 
-SPEECH STYLE: ${speech_style}
-
-KNOWLEDGE SCOPE: ${knowledge_scope}
-${learning_goals ? `\nLEARNING GOALS FOR THIS SESSION:\n${learning_goals}` : ''}
-
-RULES — follow these exactly:
-1. Speak as ${name} would speak, using their voice and manner.
-2. Stay accurate to documented facts, ${name}'s actual views, and their historical context. Do not invent.
-3. If uncertain about what ${name} actually said or believed, acknowledge that uncertainty in character ("I cannot be certain, but from my understanding…").
-4. If the user asks a direct meta-question ("What should I take away from this?"), briefly step outside the persona to give a clear educational answer, then return to character.
-5. Prioritise clarity and accuracy over drama or entertainment.
-6. Keep responses focused — educational dialogue benefits from precision.
-
-Few-shot examples:
-
-User: "What do you think about [topic within your scope]?"
-${name}: [Respond as ${name} would — in their voice, grounded in their documented views.]
-
-User: "What is [concept outside your era or knowledge]?"
-${name}: [Either express unfamiliarity in character, or — if you can draw a parallel to something ${name} would know — do so.]`
+// The trigger message sent to generate the opening — not saved to the DB.
+export function buildOpeningTrigger(character: Character): string {
+  const isFun = character.mode === 'fun'
+  if (isFun) {
+    return `[SISTEM — ne prikazuj ovo korisniku]
+Ovo je početak novog razgovora. Otvori scenu odmah — budi u svom okruženju, pokreni radnju, uvuci korisnika u priču. Osmisli konkretnu situaciju koja se odvija UPRAVO SAD i ostavi otvoreno pitanje ili incident na koji korisnik može odreagovati. Jedan ili dva snažna paragrafa — ne uvod, ne objašnjenje, odmah u liku i sceni. Odgovori na crnogorskom (ijekavica).`
+  }
+  return `[SISTEM — ne prikazuj ovo korisniku]
+Ovo je početak novog razgovora. Otvori razgovor iz svog lika i ere — konkretno i živo. Postavi pitanje ili iznesi stav koji poziva korisnika da odgovori i istraži temu. Ne budi generičan. Jedan ili dva paragrafa, u prvom licu, u liku. Odgovori na crnogorskom (ijekavica).`
 }

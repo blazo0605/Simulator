@@ -1,22 +1,259 @@
 @import "tailwindcss";
 
-/* Force dark theme — our app is dark-only */
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   Every visual value derives from these tokens.
+   No magic numbers in component code — always reference a token.
+═══════════════════════════════════════════════════════════════════ */
 :root {
-  --background: #0f0f0f;
-  --foreground: #ededed;
-  --surface: #1a1a1a;
-  --border: #2a2a2a;
-  --accent: #7c3aed;        /* violet-600 */
-  --accent-light: #a78bfa;  /* violet-400 */
+  /* ── Spacing: 8px base unit ──────────────────────────────── */
+  --sp-1:   8px;
+  --sp-2:  16px;
+  --sp-3:  24px;
+  --sp-4:  32px;
+  --sp-5:  40px;
+  --sp-6:  48px;
+  --sp-8:  64px;
+  --sp-10: 80px;
+  --sp-12: 96px;
+
+  /* ── Type scale ──────────────────────────────────────────── */
+  --fs-2xs:  0.625rem;   /* 10px */
+  --fs-xs:   0.6875rem;  /* 11px */
+  --fs-sm:   0.8125rem;  /* 13px */
+  --fs-base: 0.9375rem;  /* 15px */
+  --fs-lg:   1.0625rem;  /* 17px */
+  --fs-xl:   1.25rem;    /* 20px */
+  --fs-2xl:  1.5rem;     /* 24px */
+  --fs-3xl:  1.875rem;   /* 30px */
+  --fs-4xl:  2.25rem;    /* 36px */
+  --fs-5xl:  3rem;       /* 48px */
+
+  /* ── Border radius scale ─────────────────────────────────── */
+  --r-xs:    4px;
+  --r-sm:    6px;
+  --r-md:   10px;
+  --r-lg:   14px;
+  --r-xl:   18px;
+  --r-2xl:  24px;
+  --r-3xl:  32px;
+  --r-full: 9999px;
+
+  /* ── Elevation / shadow scale ────────────────────────────── */
+  --shadow-1: 0 1px 3px rgb(0 0 0 / 0.30);
+  --shadow-2: 0 2px 8px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.25);
+  --shadow-3: 0 4px 16px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.30);
+  --shadow-4: 0 12px 36px rgb(0 0 0 / 0.55), 0 4px 12px rgb(0 0 0 / 0.35);
+  --shadow-accent: 0 0 18px rgb(124 58 237 / 0.35), 0 0 6px rgb(124 58 237 / 0.20);
+
+  /* ── Color palette ───────────────────────────────────────── */
+  --bg:           #0d0d0d;
+  --surface:      #171717;
+  --surface-2:    #1f1f1f;
+  --surface-3:    #282828;
+  --border:       #2a2a2a;
+  --border-soft:  #1e1e1e;
+  --border-hover: #404040;
+  --text:         #e8e8e8;
+  --text-muted:   #6b6b6b;
+  --text-dim:     #3f3f3f;
+  --accent:       #7c3aed;
+  --accent-h:     #6d28d9;
+  --accent-soft:  rgba(124, 58, 237, 0.12);
+
+  /* ── Glass / translucency tokens ────────────────────────── */
+  --glass-bg:        rgba(255, 255, 255, 0.040);
+  --glass-bg-med:    rgba(255, 255, 255, 0.060);
+  --glass-bg-deep:   rgba(0,   0,   0,   0.440);
+  --glass-border:    rgba(255, 255, 255, 0.075);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.065);
+
+  /* ── Layout constants ────────────────────────────────────── */
+  --container-max: 64rem;
+  --container-sm:  42rem;
+  --header-h:      3.5rem;
+  --page-py:       2rem;
 }
 
+/* ── Base ─────────────────────────────────────────────────────── */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+/* ── Typography ───────────────────────────────────────────────── */
+/* Display serif applied to major headings for cinematic weight */
+h1 {
+  font-family: var(--font-display, var(--font-sans, system-ui));
+}
+
+/* ── Glassmorphism utilities ──────────────────────────────────── */
+@layer utilities {
+  /* Subtle frosted glass — for cards, message bubbles */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-highlight);
+  }
+
+  /* Stronger glass — for bars and panels over aurora */
+  .glass-deep {
+    background: var(--glass-bg-deep);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-highlight);
+  }
+
+  /* Accent-tinted glass — for interactive/highlighted panels */
+  .glass-accent {
+    background: rgba(124, 58, 237, 0.07);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(124, 58, 237, 0.28);
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.12), var(--glass-highlight);
+  }
+
+  /* Display serif font helper */
+  .font-display {
+    font-family: var(--font-display, serif);
+  }
+}
+
+/* ── Aurora ambient background ────────────────────────────────── */
+/* Large blurred colour orbs — only `transform` is animated for GPU efficiency */
+.aurora-orb {
+  position: fixed;
+  border-radius: 50%;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.aurora-1 {
+  width: 70vw;
+  height: 70vw;
+  top: -18vh;
+  left: -8vw;
+  background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 65%);
+  filter: blur(60px);
+  animation: aurora-drift-1 28s ease-in-out infinite;
+}
+
+.aurora-2 {
+  width: 55vw;
+  height: 55vw;
+  top: 30vh;
+  right: -12vw;
+  background: radial-gradient(circle, rgba(79,70,229,0.14) 0%, transparent 65%);
+  filter: blur(70px);
+  animation: aurora-drift-2 36s ease-in-out infinite;
+}
+
+.aurora-3 {
+  width: 48vw;
+  height: 48vw;
+  bottom: -8vh;
+  left: 18vw;
+  background: radial-gradient(circle, rgba(49,46,129,0.11) 0%, transparent 65%);
+  filter: blur(80px);
+  animation: aurora-drift-3 22s ease-in-out infinite;
+}
+
+@keyframes aurora-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25%       { transform: translate(4vw, -2vh) scale(1.05); }
+  50%       { transform: translate(2vw, 4vh) scale(0.97); }
+  75%       { transform: translate(-3vw, 1vh) scale(1.03); }
+}
+
+@keyframes aurora-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(-5vw, 3vh) scale(1.07); }
+  66%       { transform: translate(3vw, -4vh) scale(0.95); }
+}
+
+@keyframes aurora-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(5vw, -4vh) scale(1.04); }
+}
+
+/* ── Film grain overlay ───────────────────────────────────────── */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  background-image: url('/noise.svg');
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  opacity: 0.038;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* ── Animations ───────────────────────────────────────────────── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
+  30%           { transform: translateY(-5px); opacity: 1;    }
+}
+
+/* Proper shimmer sweep — horizontal highlight moving across skeleton */
+@keyframes shimmerSweep {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* Streaming cursor accent pulse */
+@keyframes cursorGlow {
+  0%, 100% { opacity: 1;    box-shadow: 0 0 6px 1px rgba(124,58,237,0.6); }
+  50%      { opacity: 0.35; box-shadow: 0 0 2px 0   rgba(124,58,237,0.2); }
+}
+
+.animate-fade-slide-in { animation: fadeSlideIn 0.24s ease-out both; }
+
+/* Skeleton loading — swept highlight replaces flat pulse */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 400% 100%;
+  animation: shimmerSweep 1.6s ease-in-out infinite;
+}
+
+.cursor-glow {
+  display: inline-block;
+  width: 2px;
+  border-radius: 9999px;
+  background: var(--accent);
+  animation: cursorGlow 1s ease-in-out infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────── */
+*                   { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--r-full); }
+
+/* ── Reduce motion ────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-orb           { animation: none !important; }
+  .animate-fade-slide-in { animation: none !important; }
+  .animate-shimmer       { animation: none !important; }
 }

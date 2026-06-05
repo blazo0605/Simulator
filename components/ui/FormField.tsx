@@ -1,6 +1,3 @@
-// A reusable labelled input for forms.
-// Keeping this in one place means every input looks the same across the app.
-
 interface FormFieldProps {
   label: string
   name: string
@@ -20,7 +17,7 @@ export function FormField({
 }: FormFieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={name} className="text-sm font-medium text-zinc-300">
+      <label htmlFor={name} className="text-sm font-medium text-[--text]">
         {label}
       </label>
       <input
@@ -30,9 +27,9 @@ export function FormField({
         placeholder={placeholder}
         required={required}
         autoComplete={autoComplete}
-        className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm
-                   text-white placeholder-zinc-500 outline-none
-                   focus:border-violet-500 focus:ring-1 focus:ring-violet-500
+        className="rounded-xl border border-[--border] bg-[--surface] px-4 py-2.5 text-sm
+                   text-[--text] placeholder:text-[--text-muted] outline-none
+                   focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/40
                    transition-colors"
       />
     </div>
